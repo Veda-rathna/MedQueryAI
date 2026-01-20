@@ -2,22 +2,17 @@
 System and user prompts for the Drug Information Chatbot
 """
 
-SYSTEM_PROMPT = """You are a drug labeling assistant.
-
-You must answer ONLY using the provided context extracted from official prescribing information PDFs.
+SYSTEM_PROMPT = """You are a precise drug information assistant. Answer ONLY using the provided context from prescribing information.
 
 Rules:
-- Do not use prior knowledge
-- Do not guess or infer
-- Do not provide medical advice
-- Use the exact terminology from the document
-- If information is not present, respond:
-  "This information is not available in the provided prescribing document."
+- Use exact terminology and values from context
+- Include route of administration for dosages
+- Mention special populations or conditions when relevant
+- Cite page numbers AND section numbers from the context: (Page X, Section Y.Z)
+- If info incomplete, say: "Not available in document"
+- No medical advice, diagnosis, or treatment recommendations
 
-Always cite page numbers in the format:
-(Page X)
-
-If multiple sections are used, cite multiple pages."""
+Be specific and comprehensive within the given context."""
 
 
 def create_user_prompt(retrieved_chunks: list, conversation_history: list, question: str) -> str:
@@ -32,36 +27,52 @@ def create_user_prompt(retrieved_chunks: list, conversation_history: list, quest
     Returns:
         Formatted prompt string
     """
-    # Format retrieved chunks
+    # Detect query type for better instructions
+    question_lower = question.lower()
+    query_type_hint = ""
+    
+    if any(word in question_lower for word in ['dosage', 'dose', 'how much', 'mg', 'frequency']):
+        query_type_hint = "\nFor dosage questions, include: dose amount, frequency, route of administration, and special considerations."
+    elif any(word in question_lower for word in ['side effect', 'adverse', 'reaction', 'warning']):
+        query_type_hint = "\nFor safety questions, include: type of reaction, frequency if available, and severity indicators."
+    elif any(word in question_lower for word in ['contraindication', 'should not', 'avoid', 'cannot']):
+        query_type_hint = "\nFor contraindication questions, be clear about absolute vs relative contraindications."
+    elif any(word in question_lower for word in ['interaction', 'drug-drug', 'combine', 'together']):
+        query_type_hint = "\nFor interaction questions, specify the mechanism and clinical significance."
+    
+    # Format retrieved chunks with section information
     context_parts = []
     for i, chunk in enumerate(retrieved_chunks, 1):
-        page = chunk.get('metadata', {}).get('page', 'Unknown')
-        section = chunk.get('metadata', {}).get('section', 'Unknown Section')
+        page = chunk.get('metadata', {}).get('page', '?')
+        section = chunk.get('metadata', {}).get('section', '')
         text = chunk.get('text', '')
-        context_parts.append(f"[Chunk {i} - Page {page} - {section}]\n{text}\n")
+        
+        # Include section if available
+        if section:
+            context_parts.append(f"[Page {page}, Section {section}]\n{text}")
+        else:
+            context_parts.append(f"[Page {page}]\n{text}")
     
-    context_text = "\n".join(context_parts)
+    context_text = "\n\n".join(context_parts)
     
-    # Format conversation history
+    # Format conversation history (last 2 only to save space)
     history_text = ""
     if conversation_history:
-        history_parts = []
-        for msg in conversation_history:
-            role = msg.get('role', 'user')
-            content = msg.get('content', '')
-            history_parts.append(f"{role.upper()}: {content}")
+        recent_history = conversation_history[-2:]  # Only last 2 exchanges
+        history_parts = [f"{msg['role']}: {msg['content']}" for msg in recent_history]
         history_text = "\n".join(history_parts)
     
-    # Build complete prompt
-    prompt = f"""Extracted Context:
+    # Build complete prompt (more concise)
+    history_section = ""
+    if history_text:
+        history_section = f"Recent conversation:\n{history_text}\n\n"
+    
+    prompt = f"""Context:
 {context_text}
 
-Conversation History:
-{history_text if history_text else "No previous conversation"}
+{history_section}Question: {question}
+{query_type_hint}
 
-User Question:
-{question}
-
-Answer using ONLY the extracted context above."""
+Answer using only the context above. Always cite with page AND section numbers from the context headers."""
     
     return prompt

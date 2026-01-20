@@ -200,30 +200,41 @@ class VectorStore:
         
         print(f"Vector store saved to {directory}")
     
-    def load(self, directory: str, document_name: str):
+    @classmethod
+    def load(cls, directory: str, document_name: str):
         """
         Load vector store from disk
         
         Args:
             directory: Directory to load from
             document_name: Name of the document
+            
+        Returns:
+            VectorStore instance
         """
+        # Create new instance
+        store = cls(model_name=config.EMBEDDING_MODEL)
+        
         # Sanitize document name
         safe_name = document_name.replace('.pdf', '').replace(' ', '_')
         
         # Load FAISS index
-        index_path = os.path.join(directory, f"{safe_name}.index")
-        self.index = faiss.read_index(index_path)
+        index_path = os.path.join(directory, f"{safe_name}.faiss")
+        if not os.path.exists(index_path):
+            index_path = os.path.join(directory, f"{safe_name}.index")
+        
+        store.index = faiss.read_index(index_path)
         
         # Load chunks and metadata
         metadata_path = os.path.join(directory, f"{safe_name}.pkl")
         with open(metadata_path, 'rb') as f:
             data = pickle.load(f)
-            self.chunks = data['chunks']
-            self.model_name = data['model_name']
-            self.dimension = data['dimension']
+            store.chunks = data['chunks']
+            store.model_name = data['model_name']
+            store.dimension = data['dimension']
         
         print(f"Vector store loaded from {directory}")
+        return store
 
 
 def create_vector_store(chunks: List[Chunk]) -> VectorStore:

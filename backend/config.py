@@ -20,7 +20,7 @@ CHUNK_SIZE = 600  # tokens (roughly 400-700 words)
 CHUNK_OVERLAP = 100  # tokens
 
 # Retrieval Parameters
-TOP_K_CHUNKS = 5
+TOP_K_CHUNKS = 4  # Balanced for 4096 token context with optimized prompts
 SIMILARITY_THRESHOLD = 0.3
 
 # Memory Settings

@@ -41,7 +41,7 @@ class RAGRetriever:
     
     def retrieve_context(self, query: str, top_k: int = config.TOP_K_CHUNKS) -> List[Dict]:
         """
-        Retrieve relevant context chunks for a query
+        Retrieve relevant context chunks for a query with intelligent re-ranking
         
         Args:
             query: User query
@@ -50,7 +50,7 @@ class RAGRetriever:
         Returns:
             List of retrieved chunks with metadata
         """
-        results = self.vector_store.search_with_boost(query, top_k=top_k)
+        results = self.vector_store.search_with_boost(query, top_k=top_k * 2)  # Get more candidates
         
         # Filter by similarity threshold
         filtered_results = [
@@ -58,7 +58,32 @@ class RAGRetriever:
             if r['similarity'] >= config.SIMILARITY_THRESHOLD
         ]
         
-        return filtered_results
+        # Re-rank based on query type and section relevance
+        query_lower = query.lower()
+        
+        for result in filtered_results:
+            section = result.get('metadata', {}).get('section', '').lower()
+            
+            # Boost dosing sections for dosage questions
+            if any(word in query_lower for word in ['dosage', 'dose', 'how much', 'mg']):
+                if 'dosage' in section or 'administration' in section or '2.' in section:
+                    result['similarity'] += 0.1
+            
+            # Boost warnings/precautions for safety questions
+            elif any(word in query_lower for word in ['warning', 'caution', 'risk', 'adverse']):
+                if 'warning' in section or 'adverse' in section or 'precaution' in section:
+                    result['similarity'] += 0.1
+            
+            # Boost contraindications section
+            elif any(word in query_lower for word in ['contraindication', 'should not', 'cannot']):
+                if 'contraindication' in section or '4.' in section:
+                    result['similarity'] += 0.1
+        
+        # Re-sort by adjusted similarity
+        filtered_results.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        # Return top_k after re-ranking
+        return filtered_results[:top_k]
     
     def extract_citations(self, chunks: List[Dict]) -> str:
         """

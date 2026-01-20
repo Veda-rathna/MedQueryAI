@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import UploadPanel from './components/UploadPanel';
 import ChatPanel from './components/ChatPanel';
+import DocumentList from './components/DocumentList';
 import Disclaimer from './components/Disclaimer';
 import { checkHealth } from './services/api';
 import './index.css';
@@ -13,6 +14,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [apiStatus, setApiStatus] = useState({ status: 'checking', lmStudioConnected: false });
+  const [refreshDocuments, setRefreshDocuments] = useState(0);
 
   useEffect(() => {
     // Check API health on mount
@@ -35,12 +37,24 @@ function App() {
     setDocumentId(result.document_id);
     setDocumentInfo(result);
     setError(null);
+    setRefreshDocuments(prev => prev + 1); // Trigger document list refresh
   };
 
   const handleUploadError = (errorMessage) => {
     setError(errorMessage);
-    setDocumentId(null);
-    setDocumentInfo(null);
+  };
+
+  const handleDocumentSelect = (docId) => {
+    setDocumentId(docId);
+    setError(null);
+  };
+
+  const handleDocumentDeleted = (deletedDocId) => {
+    if (documentId === deletedDocId) {
+      setDocumentId(null);
+      setDocumentInfo(null);
+    }
+    setRefreshDocuments(prev => prev + 1); // Trigger document list refresh
   };
 
   return (
@@ -103,11 +117,19 @@ function App() {
           setIsProcessing={setIsProcessing}
         />
 
+        {/* Document List */}
+        <DocumentList
+          key={refreshDocuments}
+          currentDocumentId={documentId}
+          onDocumentSelect={handleDocumentSelect}
+          onDocumentDeleted={handleDocumentDeleted}
+        />
+
         {/* Document Info */}
         {documentInfo && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-3">
-              📊 Document Information
+              📊 Current Document
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 rounded-lg p-4">
